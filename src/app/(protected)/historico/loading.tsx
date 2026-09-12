@@ -1,0 +1,1 @@
+export default function HistoryLoading() { return <div className="mx-auto max-w-4xl space-y-5 p-6"><div className="h-28 animate-pulse rounded-xl bg-muted" /><div className="h-28 animate-pulse rounded-xl bg-muted" /><div className="h-52 animate-pulse rounded-xl bg-muted" /></div>; }

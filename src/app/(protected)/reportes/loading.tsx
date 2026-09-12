@@ -1,0 +1,1 @@
+export default function ReportsLoading() { return <div className="mx-auto max-w-4xl space-y-5 p-6"><div className="h-16 w-56 animate-pulse rounded-lg bg-muted" /><div className="h-72 animate-pulse rounded-xl bg-muted" /></div>; }
