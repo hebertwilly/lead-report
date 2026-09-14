@@ -23,8 +23,10 @@ src/
   lib/
     analytics/         # Consultas em lote e cálculos puros de análise, comparação e metas
     auth/              # Identidade técnica, sessão e guards server-side
+    config/            # Configurações públicas centralizadas da aplicação
     reports/           # Consultas, constantes e regras de apresentação dos reportes
     supabase/          # Clientes Supabase de browser e servidor
+    whatsapp/          # Normalização, mensagem de cobrança e URL wa.me
     utils.ts           # Utilitário cn
   types/               # Tipos compartilhados de domínio
 ```

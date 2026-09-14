@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { normalizeUsername } from "@/lib/auth/username";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp";
 
 type SourceDraft = { id: string; name: string; active: boolean; primary: boolean };
 
@@ -45,6 +46,7 @@ export function ClientRegistrationForm() {
     const form = new FormData(event.currentTarget);
     const password = String(form.get("password") ?? "");
     const passwordConfirmation = String(form.get("password-confirmation") ?? "");
+    const whatsappInput = String(form.get("whatsapp-phone") ?? "");
     const activeSources = sources.filter((source) => source.active);
     const primarySources = activeSources.filter((source) => source.primary);
     const sourceNames = sources.map((source) => source.name.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
@@ -52,6 +54,11 @@ export function ClientRegistrationForm() {
     if (password !== passwordConfirmation) {
       event.preventDefault();
       setValidationError("As senhas não coincidem.");
+      return;
+    }
+    if (whatsappInput.trim() && !normalizeWhatsAppPhone(whatsappInput)) {
+      event.preventDefault();
+      setValidationError("Informe um WhatsApp válido com DDD.");
       return;
     }
     if (!activeSources.length) {
@@ -86,7 +93,12 @@ export function ClientRegistrationForm() {
             {normalizedUsername ? <>Será usado como login e URL: <strong className="font-medium text-foreground">{normalizedUsername}</strong></> : "Use letras, números e hífens."}
           </p>
         </div>
-        <div className="flex items-end pb-1">
+        <div className="space-y-2">
+          <Label htmlFor={`${formId}-whatsapp-phone`}>WhatsApp do responsável</Label>
+          <Input id={`${formId}-whatsapp-phone`} autoComplete="tel" className="min-h-11" inputMode="tel" maxLength={25} name="whatsapp-phone" placeholder="Ex.: (11) 99999-9999" type="tel" />
+          <p className="text-xs text-muted-foreground">Opcional. Para números brasileiros com DDD, adicionamos o DDI 55.</p>
+        </div>
+        <div className="flex items-end pb-1 sm:col-span-2">
           <Label className="flex min-h-11 items-center gap-2"><input defaultChecked name="active" type="checkbox" />Acesso ativo</Label>
         </div>
         <div className="space-y-2">

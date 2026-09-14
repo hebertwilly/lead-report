@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { AnalyticsDashboard } from "@/components/admin/analytics/analytics-dashboard";
 import { ClientSettings } from "@/components/admin/client-settings";
-import { getAdminClientConfiguration } from "@/lib/admin/data.server";
+import { ReportChargeAction } from "@/components/admin/report-charge-action";
+import { getAdminClientConfiguration, getAdminClientReportCharge } from "@/lib/admin/data.server";
 import { getClientAnalyticsData, type AnalyticsSearchParams } from "@/lib/analytics/data.server";
 import { requireAdmin } from "@/lib/auth/guards";
+import { getAppUrl } from "@/lib/config/app-url";
 import { getClientGoals } from "@/lib/goals/data.server";
 import { getTodayInSaoPaulo } from "@/lib/reports/date";
 import { cn } from "@/lib/utils";
@@ -16,13 +18,23 @@ export default async function ClientDetailPage({ params, searchParams }: Readonl
   const [{ clientId }, query] = await Promise.all([params, searchParams]);
   const view = query.view === "settings" ? "settings" : "analytics";
   const today = getTodayInSaoPaulo();
-  const result = view === "settings" ? await loadSettings(clientId) : await getClientAnalyticsData(clientId, query, today);
+  const [result, reportCharge] = await Promise.all([
+    view === "settings" ? loadSettings(clientId) : getClientAnalyticsData(clientId, query, today),
+    getAdminClientReportCharge(clientId, today),
+  ]);
   const client = result && "client" in result ? result.client : result?.configuration;
 
   if (!client) return <main className="p-6"><p>Cliente não encontrado.</p><Link className="text-primary" href="/admin/clientes">Voltar</Link></main>;
 
   return <main className="mx-auto max-w-7xl space-y-6 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-    <header><Link className="text-sm font-medium text-primary" href="/admin/clientes">← Clientes</Link><h1 className="mt-3 text-2xl font-bold tracking-tight">{client.name}</h1><p className="mt-1 text-sm text-muted-foreground">Desempenho comercial e configurações do cliente</p></header>
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <Link className="text-sm font-medium text-primary" href="/admin/clientes">← Clientes</Link>
+        <h1 className="mt-3 text-2xl font-bold tracking-tight">{client.name}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Desempenho comercial e configurações do cliente</p>
+      </div>
+      {reportCharge ? <ReportChargeAction appUrl={getAppUrl()} pendingDates={reportCharge.pendingDates} whatsappPhone={reportCharge.whatsappPhone} /> : null}
+    </header>
     <nav aria-label="Áreas do cliente" className="grid grid-cols-2 rounded-lg border bg-card p-1 sm:w-fit">
       <TabLink active={view === "analytics"} href={`/admin/clientes/${clientId}`}>Visão analítica</TabLink>
       <TabLink active={view === "settings"} href={`/admin/clientes/${clientId}?view=settings`}>Configurações</TabLink>

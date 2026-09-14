@@ -13,6 +13,7 @@ O schema desta V1 foi implementado em `supabase/migrations/20260908193000_create
 | `slug` | Identificador único, normalizado em minúsculas. |
 | `active` | Cliente ativo ou desativado pelo ADMIN. |
 | `reporting_started_at` | Data em que o acompanhamento do cliente iniciou. Recebe a data operacional atual por padrão; para registros existentes é preenchida a partir de `created_at`. |
+| `whatsapp_phone` | WhatsApp opcional do responsável, normalizado apenas com dígitos no formato `DDI + DDD + número`. |
 | `created_at`, `updated_at` | Auditoria temporal. |
 
 Para um CLIENT, `slug` recebe o mesmo username normalizado de `profiles.username`. O slug não substitui o UUID nas FKs e não é editável na V1.

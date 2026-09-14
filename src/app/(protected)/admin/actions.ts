@@ -8,6 +8,7 @@ import { isClientGoalMetricType, isCurrencyGoalMetric } from "@/lib/goals/consta
 import { parseClientGoalValue } from "@/lib/goals/validation";
 import { createAdminClient } from "@/lib/supabase/admin.server";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -73,11 +74,14 @@ export async function createManagedClient(formData: FormData) {
   const username = normalizeUsername(String(formData.get("username") ?? ""));
   const password = String(formData.get("password") ?? "");
   const passwordConfirmation = String(formData.get("password-confirmation") ?? "");
+  const whatsappInput = String(formData.get("whatsapp-phone") ?? "");
+  const whatsappPhone = normalizeWhatsAppPhone(whatsappInput);
   const active = formData.get("active") === "on";
   const sources = parseManagedSources(formData.get("sources"));
 
   if (!name || !isValidUsername(username) || password.length < 8) return go("/admin/clientes", "Revise os dados informados e use uma senha de pelo menos 8 caracteres.", true);
   if (password !== passwordConfirmation) return go("/admin/clientes", "As senhas não coincidem.", true);
+  if (whatsappInput.trim() && !whatsappPhone) return go("/admin/clientes", "Informe um WhatsApp válido com DDD, sem inventar o DDD.", true);
   if (!sources) return go("/admin/clientes", "Revise as origens: mantenha uma ativa, sem nomes duplicados e com no máximo uma principal ativa.", true);
 
   const admin = createAdminClient();
@@ -95,6 +99,7 @@ export async function createManagedClient(formData: FormData) {
     p_username: username,
     p_active: active,
     p_sources: sources.map((source) => ({ name: source.name, key: source.key, active: source.active, primary: source.primary, sortOrder: source.sortOrder })),
+    p_whatsapp_phone: whatsappPhone,
   });
 
   if (provision.error || !provision.data) {
@@ -109,20 +114,23 @@ export async function createManagedClient(formData: FormData) {
   redirect(`/admin/clientes/${provision.data}?sucesso=${encodeURIComponent(`Cliente criado. Username de login: ${username}.`)}`);
 }
 
-export async function updateManagedClientName(formData: FormData) {
+export async function updateManagedClientInformation(formData: FormData) {
   await requireAdmin();
   const clientId = String(formData.get("client-id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
+  const whatsappInput = String(formData.get("whatsapp-phone") ?? "");
+  const whatsappPhone = normalizeWhatsAppPhone(whatsappInput);
   const path = `/admin/clientes/${clientId}?view=settings`;
   if (!clientId || !name) go(path, "Informe o nome do cliente.", true);
+  if (whatsappInput.trim() && !whatsappPhone) go(path, "Informe um WhatsApp válido com DDD, sem inventar o DDD.", true);
 
   const supabase = await createClient();
-  const updated = await supabase.from("clients").update({ name }).eq("id", clientId);
-  if (updated.error) go(path, "Não foi possível atualizar o nome do cliente.", true);
+  const updated = await supabase.from("clients").update({ name, whatsapp_phone: whatsappPhone }).eq("id", clientId);
+  if (updated.error) go(path, "Não foi possível atualizar as informações do cliente.", true);
   revalidatePath("/admin");
   revalidatePath("/admin/clientes");
   revalidatePath(`/admin/clientes/${clientId}`);
-  go(path, "Nome do cliente atualizado.");
+  go(path, "Informações do cliente atualizadas.");
 }
 
 export async function resetManagedClientPassword(formData: FormData) {

@@ -1,10 +1,12 @@
 import "server-only";
 
 import { getChargeableReportDates, getPendingStartDate } from "@/lib/reports/date";
-import { getActiveLeadSourcesAtDate, getDailyCompletionStatus, hasPendingDailyReport, type DailyCompletionStatus, type LeadSource, type ReportSourceStatusRecord } from "@/lib/reports/data.server";
+import { getActiveLeadSourcesAtDate, getClientLeadSources, getDailyCompletionStatus, hasPendingDailyReport, type DailyCompletionStatus, type LeadSource, type ReportSourceStatusRecord } from "@/lib/reports/data.server";
 import { createClient } from "@/lib/supabase/server";
 
-type ClientRow = { id: string; name: string; slug: string; active: boolean; reporting_started_at: string; profiles: Array<{ id: string; username: string; active: boolean; role: string }> | null };
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type ClientRow = { id: string; name: string; slug: string; active: boolean; reporting_started_at: string; whatsapp_phone: string | null; profiles: Array<{ id: string; username: string; active: boolean; role: string }> | null };
 type ReportRow = { client_id: string; report_date: string; report_sources: ReportSourceStatusRecord[] | null };
 type SourceRow = { id: string; client_id: string; name: string; key: string; is_active: boolean; is_primary: boolean; sort_order: number; lead_source_active_periods: Array<{ active_from: string; inactive_from: string | null }> | null };
 type MonthlyMetricRow = { sales: number; revenue: number | string; daily_reports: { client_id: string; report_date: string } | null };
@@ -35,7 +37,14 @@ export type AdminDashboardData = {
   clientsWithPendingReports: AdminClientOverview[];
 };
 
-export type AdminClientConfiguration = Pick<AdminClientOverview, "id" | "name" | "slug" | "active" | "reportingStartedAt" | "username" | "accessActive" | "leadSources">;
+export type AdminClientConfiguration = Pick<AdminClientOverview, "id" | "name" | "slug" | "active" | "reportingStartedAt" | "username" | "accessActive" | "leadSources"> & {
+  whatsappPhone: string | null;
+};
+
+export type AdminClientReportCharge = {
+  whatsappPhone: string | null;
+  pendingDates: string[];
+};
 
 function mapSource(row: SourceRow): LeadSource {
   return { id: row.id, name: row.name, key: row.key, isActive: row.is_active, isPrimary: row.is_primary, sortOrder: row.sort_order, periods: row.lead_source_active_periods ?? [] };
@@ -45,7 +54,7 @@ function mapSource(row: SourceRow): LeadSource {
 export async function getAdminClientConfiguration(clientId: string): Promise<AdminClientConfiguration | null> {
   const supabase = await createClient();
   const [clientResult, sourcesResult] = await Promise.all([
-    supabase.from("clients").select("id, name, slug, active, reporting_started_at, profiles(id, username, active, role)").eq("id", clientId).maybeSingle(),
+    supabase.from("clients").select("id, name, slug, active, reporting_started_at, whatsapp_phone, profiles(id, username, active, role)").eq("id", clientId).maybeSingle(),
     supabase.from("lead_sources").select("id, client_id, name, key, is_active, is_primary, sort_order, lead_source_active_periods(active_from, inactive_from)").eq("client_id", clientId).order("sort_order").order("name"),
   ]);
   if (clientResult.error || sourcesResult.error) throw new Error("Não foi possível carregar as configurações do cliente.");
@@ -60,13 +69,57 @@ export async function getAdminClientConfiguration(clientId: string): Promise<Adm
     reportingStartedAt: client.reporting_started_at,
     username: profile?.username ?? null,
     accessActive: Boolean(profile?.active),
+    whatsappPhone: client.whatsapp_phone,
     leadSources: (sourcesResult.data as unknown as SourceRow[] ?? []).map(mapSource),
   };
 }
 
+/** Pendências operacionais atuais, sem depender dos filtros da visão analítica. */
+export async function getAdminClientReportCharge(clientId: string, today: string): Promise<AdminClientReportCharge | null> {
+  if (!UUID_PATTERN.test(clientId)) return null;
+
+  const supabase = await createClient();
+  const clientResult = await supabase
+    .from("clients")
+    .select("reporting_started_at, whatsapp_phone")
+    .eq("id", clientId)
+    .maybeSingle();
+
+  if (clientResult.error) throw new Error("Não foi possível carregar os dados de cobrança do cliente.");
+  if (!clientResult.data) return null;
+
+  const client = clientResult.data as { reporting_started_at: string; whatsapp_phone: string | null };
+  const chargeableDates = getChargeableReportDates(
+    getPendingStartDate(client.reporting_started_at),
+    client.reporting_started_at,
+    today,
+  );
+  if (!chargeableDates.length) return { whatsappPhone: client.whatsapp_phone, pendingDates: [] };
+
+  const [leadSources, reportsResult] = await Promise.all([
+    getClientLeadSources(clientId),
+    supabase
+      .from("daily_reports")
+      .select("client_id, report_date, report_sources(lead_source_id, status)")
+      .eq("client_id", clientId)
+      .gte("report_date", chargeableDates[chargeableDates.length - 1])
+      .lte("report_date", chargeableDates[0]),
+  ]);
+  if (reportsResult.error) throw new Error("Não foi possível verificar as pendências do cliente.");
+
+  const reportsByDate = new Map(
+    (reportsResult.data as unknown as ReportRow[] ?? []).map((report) => [report.report_date, report.report_sources ?? []]),
+  );
+  const pendingDates = chargeableDates
+    .filter((date) => hasPendingDailyReport(reportsByDate.get(date) ?? [], getActiveLeadSourcesAtDate(leadSources, date)))
+    .sort();
+
+  return { whatsappPhone: client.whatsapp_phone, pendingDates };
+}
+
 export async function getAdminDashboardData(today: string): Promise<AdminDashboardData> {
   const supabase = await createClient();
-  const clientsResult = await supabase.from("clients").select("id, name, slug, active, reporting_started_at, profiles(id, username, active, role)").order("name");
+  const clientsResult = await supabase.from("clients").select("id, name, slug, active, reporting_started_at, whatsapp_phone, profiles(id, username, active, role)").order("name");
   if (clientsResult.error) throw new Error("Não foi possível carregar os clientes.");
 
   const clientRows = (clientsResult.data as unknown as ClientRow[] ?? []);
