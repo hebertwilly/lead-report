@@ -237,6 +237,52 @@ export async function createClientGoal(formData: FormData) {
   go(path, "Meta adicionada com sucesso.");
 }
 
+/** Remove um único CLIENT no banco e, após o commit, sua identidade Auth. */
+export async function deleteManagedClient(formData: FormData) {
+  await requireAdmin();
+  const clientId = String(formData.get("client-id") ?? "");
+  const confirmation = String(formData.get("username-confirmation") ?? "");
+  const path = `/admin/clientes/${clientId}?view=settings`;
+  if (!uuidPattern.test(clientId) || !confirmation) go(path, "Confirme o username atual do cliente para excluir.", true);
+
+  const admin = createAdminClient();
+  const [clientResult, profilesResult] = await Promise.all([
+    admin.from("clients").select("id").eq("id", clientId).maybeSingle(),
+    admin.from("profiles").select("id, username, role, client_id").eq("client_id", clientId),
+  ]);
+  if (clientResult.error || profilesResult.error) go(path, "Não foi possível validar o cliente para exclusão. Tente novamente.", true);
+  if (!clientResult.data) {
+    const pending = await admin.from("client_deletion_auth_queue").select("auth_user_id, username").eq("client_id", clientId).eq("username", confirmation).maybeSingle();
+    if (pending.error || !pending.data) return go("/admin/clientes", "Cliente não encontrado ou exclusão pendente sem confirmação segura.", true);
+    return finishClientAuthDeletion(admin, clientId, pending.data as { auth_user_id: string; username: string });
+  }
+
+  const profiles = (profilesResult.data as Array<{ id: string; username: string; role: string; client_id: string | null }> | null) ?? [];
+  if (profiles.length !== 1) go(path, "A relação de acesso do cliente está inconsistente; a exclusão foi bloqueada.", true);
+  const profile = profiles[0];
+  if (!profile || profile.role !== "CLIENT" || profile.client_id !== clientId || profile.username === "mestre") {
+    go(path, "O cliente está associado a um profile protegido ou inválido; a exclusão foi bloqueada.", true);
+  }
+  if (confirmation !== profile.username) go(path, "O username informado não corresponde ao acesso atual do cliente.", true);
+  const deleted = await admin.rpc("delete_client_permanently", { p_client_id: clientId, p_expected_profile_id: profile.id, p_expected_username: profile.username });
+  if (deleted.error || !deleted.data) go(path, "Não foi possível excluir o cliente com segurança. Nenhum dado foi removido.", true);
+  return finishClientAuthDeletion(admin, clientId, deleted.data as { auth_user_id: string; username: string });
+}
+
+async function finishClientAuthDeletion(admin: ReturnType<typeof createAdminClient>, clientId: string, pending: { auth_user_id: string; username: string }): Promise<never> {
+  if (!pending.auth_user_id || pending.username === "mestre") return go("/admin/clientes", "A exclusão foi bloqueada por proteção de identidade.", true);
+  const deletedAuth = await admin.auth.admin.deleteUser(pending.auth_user_id);
+  const authAlreadyMissing = deletedAuth.error?.status === 404;
+  if (deletedAuth.error && !authAlreadyMissing) {
+    revalidatePath("/admin"); revalidatePath("/admin/clientes"); revalidatePath(`/admin/clientes/${clientId}`);
+    return go("/admin/clientes", "Os dados do cliente foram removidos, mas a identidade Auth ficou pendente para nova tentativa segura.", true);
+  }
+  const acknowledged = await admin.rpc("acknowledge_client_deletion_auth", { p_client_id: clientId, p_auth_user_id: pending.auth_user_id, p_expected_username: pending.username });
+  if (acknowledged.error) return go("/admin/clientes", "Os dados foram removidos, mas a confirmação da remoção Auth ficou pendente para nova tentativa segura.", true);
+  revalidatePath("/admin"); revalidatePath("/admin/clientes"); revalidatePath(`/admin/clientes/${clientId}`);
+  return go("/admin/clientes", "Cliente excluído com sucesso.");
+}
+
 export async function updateClientGoal(formData: FormData) {
   await requireAdmin();
   const clientId = String(formData.get("client-id") ?? "");

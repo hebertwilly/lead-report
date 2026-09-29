@@ -1,4 +1,5 @@
 import { resetManagedClientPassword, saveLeadSource, setManagedClientActive, updateManagedClientInformation } from "@/app/(protected)/admin/actions";
+import { DeleteClientSection } from "@/components/admin/delete-client-section";
 import { ClientGoalsSection } from "@/components/admin/client-goals-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function ClientSettings({ client, goals }: Readonly<{ client: AdminClient
     <ClientGoalsSection clientId={client.id} goals={goals} />
     <section className="space-y-3"><h2 className="text-xl font-bold">Acesso</h2><div className="grid gap-4 md:grid-cols-2"><Card><CardContent className="p-4 sm:p-5"><h3 className="font-bold">Status do acesso</h3><p className="mt-1 text-sm text-muted-foreground">Cliente {accessActive ? "ativo" : "inativo"}.</p><form action={setManagedClientActive} className="mt-4"><input name="client-id" type="hidden" value={client.id} /><input name="active" type="hidden" value={String(!accessActive)} /><Button className="min-h-11 w-full" type="submit" variant={accessActive ? "destructive" : "default"}>{accessActive ? "Desativar acesso" : "Reativar acesso"}</Button></form></CardContent></Card><Card><CardContent className="p-4 sm:p-5"><h3 className="font-bold">Resetar senha</h3><form action={resetManagedClientPassword} className="mt-4 space-y-3"><input name="client-id" type="hidden" value={client.id} /><input aria-label="Nova senha" className="min-h-11 w-full rounded-md border px-3" minLength={8} name="password" placeholder="Nova senha" required type="password" autoComplete="new-password" /><input aria-label="Confirmar nova senha" className="min-h-11 w-full rounded-md border px-3" minLength={8} name="password-confirmation" placeholder="Confirmar nova senha" required type="password" autoComplete="new-password" /><Button className="min-h-11 w-full" type="submit" variant="outline">Salvar nova senha</Button></form></CardContent></Card></div></section>
     <section className="space-y-3"><div><h2 className="text-xl font-bold">Origens de leads</h2><p className="text-sm text-muted-foreground">As origens ativas são usadas nos novos reportes; o histórico e a vigência são preservados.</p></div>{client.leadSources.map((source) => <SourceForm clientId={client.id} key={source.id} source={source} />)}<SourceForm clientId={client.id} /></section>
+    <DeleteClientSection clientId={client.id} clientName={client.name} username={client.username} />
   </div>;
 }
 

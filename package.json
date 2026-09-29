@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "node --no-warnings --experimental-strip-types --test tests/*.test.mjs",
     "create:admin": "node scripts/create-admin.mjs",
-    "create:test-client": "node scripts/create-test-client.mjs"
+    "create:test-client": "node scripts/create-test-client.mjs",
+    "reset:test-data": "node scripts/reset-test-data.mjs",
+    "reset:test-data:dry": "node scripts/reset-test-data.mjs --dry-run"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",

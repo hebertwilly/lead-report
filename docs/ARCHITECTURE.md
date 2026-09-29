@@ -81,6 +81,8 @@ O comando `create:admin` é recuperável: se encontrar a identidade Auth técnic
 - Planejar componentes visuais reutilizáveis e responsivos antes de páginas extensas.
 - A dashboard ADMIN por cliente possui uma camada própria em `src/lib/analytics`: consultas server-side ficam separadas de agregações, comparações, pendências e metas testáveis como funções puras.
 
+- A exclusão definitiva de um único cliente combina uma Server Action ADMIN, procedure SQL transacional e uma fila técnica para a remoção posterior no Supabase Auth. A fronteira entre PostgreSQL e Auth é recuperável: dados não são recriados se Auth falhar, e a pendência fica limitada ao UUID/username já validados.
+
 ### Identidade de CLIENT
 
 Para CLIENT, um username normalizado é a única identidade legível: ele é o login, `profiles.username` e `clients.slug`. O UUID de `clients` continua sendo a chave primária e todas as FKs seguem usando UUID. A conversão para o e-mail técnico do Supabase Auth ocorre somente no servidor.

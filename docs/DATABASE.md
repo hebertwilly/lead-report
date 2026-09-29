@@ -67,6 +67,12 @@ Novos clientes são provisionados pela função `provision_client_with_access`, 
 
 A migration `20260910110000_repair_legacy_lead_sources.sql` recupera de forma idempotente clientes legados sem nenhuma origem, usando o conjunto padrão que existia antes das origens configuráveis. Ela também cria um período apenas para origens ativas que não possuíam nenhum, iniciando no primeiro reporte histórico da própria origem ou em `reporting_started_at`. As alterações administrativas posteriores usam `save_lead_source_configuration`, que atualiza a origem e a vigência na mesma transação.
 
+## Limpeza administrativa de dados de teste
+
+A migration `20260914160000_add_reset_test_data_procedure.sql` adiciona `reset_test_client_data`, uma função transacional exclusiva da `service_role` para preparar o banco para uso real. Ela valida o profile e o usuário Auth do ADMIN `mestre`, bloqueia a operação se o grafo atual de FKs divergir das tabelas conhecidas, remove as dependências em ordem explícita e nunca usa `TRUNCATE CASCADE`.
+
+Como a remoção oficial de usuários Auth ocorre pela Admin API depois do commit PostgreSQL, `reset_test_data_auth_queue` mantém temporariamente os UUIDs CLIENT pendentes. `acknowledge_reset_test_data_auth_deletion` retira cada item somente após o script confirmar sua ausência no Auth. As duas funções são inacessíveis a `anon` e `authenticated`. O uso operacional, dry-run, confirmação e riscos estão documentados em `RESET_TEST_DATA.md`.
+
 ### `objections`
 
 | Coluna | Observação |
@@ -89,6 +95,10 @@ Constraint implementada: `unique (report_source_id, type)` para uma linha por mo
 | `quantity` | Inteiro positivo. |
 
 A soma das quantidades não pode exceder `report_sources.sales`. Na V1, essa regra é responsabilidade da aplicação, que deverá validar a operação em transação; não foi criado trigger de agregação no banco.
+
+## Exclusão definitiva de um cliente
+
+A migration `20260922110000_add_delete_client_procedure.sql` adiciona a procedure `delete_client_permanently`, executável somente por `service_role`. Ela exige o client, o UUID do profile CLIENT e o username esperado, valida o ADMIN mestre e remove somente o grafo do client alvo. A tabela técnica `client_deletion_auth_queue` mantém a identidade Auth até a Admin API confirmar sua ausência; ela não possui FK de propósito, pois deve sobreviver ao commit que remove o client e o profile. Consulte `DELETE_CLIENT.md` para o fluxo de recuperação e idempotência.
 
 ## Enums planejados
 
